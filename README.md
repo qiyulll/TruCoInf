@@ -4,7 +4,7 @@ To address privacy breaches of input data, model weight theft, unreliable infere
 
 
 
-#1. Prerequisites
+# 1. Prerequisites
 #Before proceeding, ensure you have:
 #Conda installed on your system.
 #Access to the project directory (your_project_directory).
@@ -12,10 +12,10 @@ To address privacy breaches of input data, model weight theft, unreliable infere
 
 
 
-#2. Environment Setup
+# 2. Environment Setup
 #2.1. Create and Activate Conda Environment
 bash
-# Create a new Conda environment with Python 3.11
+#Create a new Conda environment with Python 3.11
 conda create -n TruCoInf python=3.11 -y
 conda activate TruCoInf
 
@@ -28,7 +28,7 @@ bash
 conda install cuda -c nvidia/label/cuda-12.1.0 -y
 
 
-#3. Project Initialization & Dependency Installation
+# 3. Project Initialization & Dependency Installation
 #3.1. Navigate to the Project Directory
 bash
 cd "your_project_directory"
@@ -40,7 +40,7 @@ bash
 pip install -r requirements.txt
 
 
-#4. Environment Verification
+# 4. Environment Verification
 #4.1. Verify CUDA Installation
 bash
 nvcc --version
@@ -54,14 +54,14 @@ bash
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}')"
 #A successful verification will output CUDA available: True along with your GPU model name.
 
-#5. Model & Configuration
+# 5. Model & Configuration
 #5.1. Download Models
 #Download the required model files and place them in the code/models/ directory.
 
 #5.2. Modify Configuration File
 #Edit the model configuration file example_configs/qwen_ensemble.yaml according to your setup (e.g., update model paths).
 
-#6. Compile zkhook Module
+# 6. Compile zkhook Module
 #6.1. Navigate and Clean
 bash
 cd zkhook
@@ -72,11 +72,11 @@ make clean
 #Edit the zkllm/Makefile and set the ARCH variable according to your GPU's compute capability:
 
 makefile
-# GPU architecture - modify according to your GPU:
-# RTX 30xx (Ampere) -> sm_86
-# RTX 40xx (Ada)    -> sm_89
-# A100              -> sm_80
-# V100              -> sm_70
+#GPU architecture - modify according to your GPU:
+#RTX 30xx (Ampere) -> sm_86
+#RTX 40xx (Ada)    -> sm_89
+#A100              -> sm_80
+#V100              -> sm_70
 ARCH := sm_86  # MODIFY THIS LINE FOR YOUR GPU
 
 
@@ -86,7 +86,7 @@ make all
 make stepwise
 
 
-#7. Running the Project
+# 7. Running the Project
 #7.1. Start the API Server
 #From the project's root directory, start the server using the Qwen configuration:
 bash
