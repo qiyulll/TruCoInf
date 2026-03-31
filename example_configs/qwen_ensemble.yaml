@@ -1,0 +1,27 @@
+
+# 输出概率取平均
+NORM_TYPE_API_SERVER: 'average'
+
+# 阈值设为 1.0，强制每一步都集成，方便观察效果
+THRESHOLD_API_SERVER: 1.0
+
+CONFIG_API_SERVER:
+  # --- 模型 A: Qwen1.5-7B-Chat ---
+  - weight: './weights/Qwen1.5-7B-Chat'
+    max_memory:
+      0: '22GiB'
+    num_gpus: 1
+    name: 'Qwen1.5-7B-Chat'
+    score: 100
+    priority: 'supportive'
+    quantization: 'none'
+
+  # --- 模型 B: Qwen1.5-1.8B-Chat ---
+  - weight: './weights/Qwen1.5-1.8B-Chat'
+    max_memory:
+      0: '22GiB'
+    num_gpus: 1
+    name: 'Qwen1.5-1.8B-Chat'
+    score: 100
+    priority: 'supportive'
+    quantization: 'none'
