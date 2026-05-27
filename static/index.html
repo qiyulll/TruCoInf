@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GaC zkhook 控制台</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>GaC zkhook 本地控制台</h1>
+        <p id="projectRoot">加载项目状态中...</p>
+      </div>
+      <div class="status-strip">
+        <span class="badge" id="serviceBadge">API: unknown</span>
+        <span class="badge" id="rayBadge">Ray: 未检查</span>
+        <span class="badge" id="gpuBadge">GPU: 未检查</span>
+        <span class="badge strong" id="requestBadge">request_id: -</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel model-panel">
+        <div class="panel-head">
+          <h2>模型选择</h2>
+          <button id="loadModelsBtn">刷新</button>
+        </div>
+        <div class="form-row compact">
+          <label>融合策略</label>
+          <select id="normType">
+            <option value="average">average</option>
+            <option value="score">score</option>
+          </select>
+          <label>阈值</label>
+          <input id="threshold" type="number" min="0" max="1" step="0.01" value="1.0" />
+        </div>
+        <div id="modelList" class="model-list"></div>
+        <div class="actions">
+          <button id="generateYamlBtn" class="primary">生成 YAML</button>
+        </div>
+        <div class="kv">
+          <span>Config</span>
+          <code id="configPath">未生成</code>
+        </div>
+        <textarea id="yamlPreview" class="codebox" spellcheck="false" placeholder="生成后的 YAML 会显示在这里"></textarea>
+      </section>
+
+      <section class="workspace">
+        <section class="panel service-panel">
+          <div class="panel-head">
+            <h2>服务控制</h2>
+            <div class="actions inline">
+              <button id="statusBtn">状态</button>
+              <button id="gpuBtn">检查 GPU</button>
+              <button id="rayBtn">检查 Ray</button>
+            </div>
+          </div>
+          <div class="grid-4">
+            <label>端口<input id="serverPort" type="number" value="8001" /></label>
+            <label>Host<input id="serverHost" value="127.0.0.1" /></label>
+            <label>request_id<input id="requestId" placeholder="自动生成" /></label>
+            <label>模型名证据<select id="useModelNameEvidence"><option value="true">开启</option><option value="false">关闭</option></select></label>
+          </div>
+          <div class="actions">
+            <button id="startServerBtn" class="primary">启动服务</button>
+            <button id="stopServerBtn" class="danger">停止服务</button>
+            <button id="copyRequestBtn">复制 request_id</button>
+            <span id="serviceStep" class="step-state idle">未运行</span>
+          </div>
+          <div id="serviceCommand" class="command-box hidden"></div>
+        </section>
+
+        <section class="panel generation-panel">
+          <div class="panel-head">
+            <h2>生成</h2>
+            <span class="hint">qwen-new-7B 建议关闭 apply_chat_template</span>
+          </div>
+          <textarea id="prompt" class="prompt" placeholder="输入 prompt">Hello</textarea>
+          <div class="grid-4 equal">
+            <label>max_new_tokens<input id="maxNewTokens" type="number" min="1" max="512" value="1" /></label>
+            <label>min_new_tokens<input id="minNewTokens" type="number" min="0" max="512" value="1" /></label>
+            <label>apply_chat_template<select id="applyChatTemplate"><option value="false">false</option><option value="true">true</option></select></label>
+            <label>until<input id="until" placeholder="可选，逗号分隔" /></label>
+          </div>
+          <div class="actions">
+            <button id="generateBtn" class="primary">发送生成请求</button>
+            <button id="scanEvidenceBtn">扫描证据</button>
+            <span id="generateStep" class="step-state idle">等待生成</span>
+          </div>
+          <div id="generateCommand" class="command-box hidden"></div>
+          <div class="answer-box">
+            <div class="subhead">最终回答</div>
+            <pre id="answer">-</pre>
+          </div>
+          <div class="token-box">
+            <div class="subhead">模型 token 置信度与 GaC 选择</div>
+            <pre id="tokenTrace">生成后从服务日志解析展示</pre>
+          </div>
+        </section>
+
+        <section class="panel evidence-panel">
+          <div class="panel-head">
+            <h2>证据</h2>
+            <div class="path-actions">
+              <code id="evidencePath">zk_evidence/request_id</code>
+              <button id="copyEvidencePathBtn">复制路径</button>
+            </div>
+          </div>
+          <div class="note">长期权重保存在 <code>zk_weights/&lt;model-name&gt;</code>，清理本次 evidence 不会删除 zk_weights。</div>
+          <div class="actions">
+            <button id="cleanupEvidenceBtn" class="danger">清理本次 evidence</button>
+            <span id="cleanupStep" class="step-state idle">未清理</span>
+          </div>
+          <div id="evidenceCommand" class="command-box hidden"></div>
+          <div id="evidenceWarning" class="critical-warning hidden">证据中包含重复权重副本，会导致证明开销异常，请检查 hook 逻辑。</div>
+          <div id="evidenceSummary" class="cards"></div>
+        </section>
+
+        <section class="panel proof-panel">
+          <div class="panel-head">
+            <h2>证明</h2>
+            <span class="hint">proof 复用 verify.py，权重读取 zk_weights/&lt;model-name&gt;</span>
+          </div>
+          <div id="proofList" class="proof-list"></div>
+        </section>
+
+        <section class="panel command-panel">
+          <div class="panel-head">
+            <h2>复现命令</h2>
+            <button id="clearCommandsBtn">清空</button>
+          </div>
+          <div id="commandHistory" class="command-history"></div>
+        </section>
+
+        <section class="panel error-panel">
+          <div class="panel-head">
+            <h2>错误提示</h2>
+            <button id="clearErrorsBtn">清空</button>
+          </div>
+          <div id="errorHints" class="error-hints">暂无错误。</div>
+        </section>
+      </section>
+
+      <aside class="panel stats-panel">
+        <h2>开销统计</h2>
+        <div class="metric"><span>Evidence 总大小</span><strong id="evidenceBytes">-</strong></div>
+        <div class="metric"><span>Proof 总大小</span><strong id="proofBytes">-</strong></div>
+        <div class="metric"><span>两模型合计</span><strong id="totalBytes">-</strong></div>
+        <div class="metric"><span>每 token evidence</span><strong id="evidencePerToken">-</strong></div>
+        <div class="metric"><span>每 token proof</span><strong id="proofPerToken">-</strong></div>
+        <div class="metric"><span>每 token 合计</span><strong id="totalPerToken">-</strong></div>
+        <table class="metrics-table">
+          <thead>
+            <tr>
+              <th>evidence MB</th>
+              <th>proof MB</th>
+              <th>total MB</th>
+              <th>tokens</th>
+              <th>MB/token</th>
+            </tr>
+          </thead>
+          <tbody id="metricsTableBody">
+            <tr><td colspan="5">暂无统计</td></tr>
+          </tbody>
+        </table>
+        <button id="metricsBtn">刷新统计</button>
+      </aside>
+    </main>
+
+    <section class="log-panel">
+      <div class="panel-head">
+        <h2>日志</h2>
+        <button id="clearLogBtn">清空</button>
+      </div>
+      <pre id="logOutput"></pre>
+    </section>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

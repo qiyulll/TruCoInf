@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# Runtime outputs
+log/*
+!log/.gitkeep
+output/*
+!output/.gitkeep
+generated_configs/*
+!generated_configs/.gitkeep
+zk_evidence/*
+!zk_evidence/.gitkeep
+proofs/
+*.log
+
+# Large model and generated ZK assets
+weights/*
+!weights/.gitkeep
+!weights/README.md
+zk_weights/*
+!zk_weights/.gitkeep
+!zk_weights/README.md
+*.safetensors
+*.bin
+
+# CUDA build outputs
+zkhook/*.o
+zkhook/table_gen
+zkhook/transformer_prove
+zkhook/transformer_verify
+zkhook/rmsnorm_prove
+zkhook/rmsnorm_verify
+zkhook/attn_prove
+zkhook/attn_verify
+zkhook/ffn_prove
+zkhook/ffn_verify
+zkhook/tables_*.bin
+
+# Local IDE / agent state
+.agents/
+.codex/
+.vscode/
+.idea/

@@ -1,0 +1,230 @@
+1. 上传代码到数据盘                                                                                     
+                                                                                                          
+  # 代码放数据盘  
+  cd /root/autodl-tmp
+  # 上传你的 code 文件夹到这里，假设目录名为 zkhook-gac
+
+  2. Python 环境
+
+  你的镜像是 Python 3.12 + PyTorch 2.8.0，和 requirements.txt 里的 torch==2.2.1 冲突。建议直接用镜像自带的
+   PyTorch，不要降级：
+
+  cd /root/autodl-tmp/zkhook-gac
+
+  # 把 conda 环境也建在数据盘
+  conda create --prefix /root/autodl-tmp/envs/zkhook python=3.12 -y
+  conda activate /root/autodl-tmp/envs/zkhook
+
+  # 先装镜像自带版本的 torch（不要装 requirements.txt 里的旧版）
+  pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+
+  # 装其他依赖，跳过 torch
+  pip install accelerate fastapi natsort numpy pydantic PyYAML ray requests \
+      safetensors tqdm transformers uvicorn bitsandbytes \
+      -i https://pypi.tuna.tsinghua.edu.cn/simple
+3. 编译 zkhook (CUDA)
+
+  Makefile 里 ARCH := sm_89 已经是 RTX 4090 的架构，4090D 也是 sm_89，不用改。
+
+  cd /root/autodl-tmp/zkhook-gac/zkhook
+
+  export CUDA_HOME=/usr/local/cuda
+  make clean
+  make all
+  make stepwise
+  - make all — 编译主要目标：table_gen、transformer_prove、transformer_verify，这是完整 Transformer 层的
+  ZK 证明（一次性证明整层）                                                                                 - make stepwise — 编译分步目标：rmsnorm_prove/verify、attn_prove/verify、ffn_prove/verify，把
+  - make stepwise — 编译分步目标：rmsnorm_prove/verify、attn_prove/verify、ffn_prove/verify，把
+  RMSNorm、Attention、FFN 拆开单独证明                                                                     
+  两个都要执行。项目里 verify.py 会调用分步的二进制文件（attn_prove、ffn_prove 等），如果只编译
+  make all 会缺东西。
+
+  # 验证编译成功
+  ls -la table_gen transformer_prove transformer_verify attn_prove attn_verify ffn_prove ffn_verify       
+
+  4. 下载模型到数据盘
+
+  cd /root/autodl-tmp/zkhook-gac
+
+  # 学术加速（AutoDL 专属）
+  source /etc/network_turbo
+
+  # 模型放数据盘
+  mkdir -p /root/autodl-tmp/weights
+
+  pip install modelscope -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+  python << 'EOF'
+  from modelscope import snapshot_download
+
+  # Qwen1.5-1.8B-Chat (~3.6GB)
+  snapshot_download('qwen/Qwen1.5-1.8B-Chat', cache_dir='/root/autodl-tmp/weights')
+
+  # Qwen1.5-7B-Chat (~14GB，会用 4bit 量化)
+  snapshot_download('qwen/Qwen1.5-7B-Chat', cache_dir='/root/autodl-tmp/weights')
+  EOF
+
+  5. 创建配置文件
+
+  24GB 显存需要量化，路径指向数据盘：
+
+  cat > /root/autodl-tmp/zkhook-gac/config.yaml << 'EOF'
+  NORM_TYPE_API_SERVER: 'average'
+  THRESHOLD_API_SERVER: 0.8
+
+  CONFIG_API_SERVER:
+    - weight: '/root/autodl-tmp/weights/qwen/Qwen1.5-7B-Chat'
+      max_memory:
+        0: '12GiB'
+      num_gpus: 1
+      name: 'Qwen1.5-7B-Chat'
+      score: 100
+      priority: 'primary'
+      quantization: '4bit'
+
+    - weight: '/root/autodl-tmp/weights/qwen/Qwen1.5-1.8B-Chat'
+      max_memory:
+        0: '10GiB'
+      num_gpus: 1
+      name: 'Qwen1.5-1.8B-Chat'
+      score: 100
+      priority: 'supportive'
+      quantization: 'none'
+  EOF
+
+  6. 启动服务
+
+  cd /root/autodl-tmp/zkhook-gac
+
+  export ZK_EVIDENCE_ROOT_DIR="/root/autodl-tmp/zkhook-gac/zk_evidence"
+  export ZK_ATTN_EVIDENCE=1
+  export ZK_FFN_EVIDENCE=1
+
+  python gac_api_server.py --config-path config.yaml --port 8000
+
+  7. 测试（另开终端）
+
+  curl -X POST http://localhost:8000/api/generate/ \
+    -H "Content-Type: application/json" \
+    -d '{
+      "messages_list": [[{"role": "user", "content": "什么是零知识证明？"}]],
+      "max_new_tokens": 100,
+      "apply_chat_template": true,
+      "request_id": "test_001"
+    }'
+
+  8. ZK 证明验证
+
+  cd /root/autodl-tmp/zkhook-gac/zkhook
+  ./table_gen 2048 tables_1.8B.bin
+
+  cd ..
+  python verify.py --request-id test_001 --model-size 1.8B
+
+  curl -X POST http://localhost:8000/api/generate/ \
+    -H "Content-Type: application/json" \
+    -d '{
+      "messages_list": [[{"role": "user", "content": "什么是零知识证明？"}]],
+      "max_new_tokens": 100,
+      "apply_chat_template": true,
+      "request_id": "test_001"
+    }'
+
+  8. ZK 证明验证
+
+  cd /root/autodl-tmp/zkhook-gac/zkhook
+  ./table_gen 2048 tables_1.8B.bin
+
+  cd ..
+  python verify.py --request-id test_001 --model-size 1.8B
+
+  ---
+  几个注意点：
+
+  - PyTorch 版本：你的镜像是 2.8.0 + CUDA 12.8，比项目要求的 2.2.1
+  新很多。大概率兼容，但如果遇到奇怪的报错，可能需要降到 2.2.1
+  - 磁盘占用估算：模型约 18GB，conda 环境约 5-8GB，代码+编译产物约 1GB，总共约 25-30GB，50GB
+  数据盘够用但比较紧
+  - 如果数据盘不够，可以只下 1.8B 模型先跑通单模型，再考虑 7B
+
+  先把代码传上去，按步骤走，遇到问题随时问我。
+
+
+
+
+
+整体方案
+
+  文件结构
+  
+  config.yaml                  # 通用协同推理配置
+
+  utils/eval_judge.py           # 评判工具（规则提取 + 小模型兜底）
+  benchmark_accuracy.py         # 主评测脚本
+
+  ---
+  一、下载模型
+
+  在 AutoDL 机器上，推荐用 modelscope（国内快）或 huggingface-cli：
+
+  方法 1：ModelScope（推荐，国内不用翻墙）
+
+  pip install modelscope
+
+  # 下载 DeepSeek-R1-7B
+  python -c "
+  from modelscope import snapshot_download
+  snapshot_download('deepseek-ai/DeepSeek-R1-Distill-Qwen-7B', cache_dir='/root/autodl-tmp/models')
+  "
+
+  # 下载 DeepSeek-R1-14B
+  python -c "
+  from modelscope import snapshot_download
+  snapshot_download('deepseek-ai/DeepSeek-R1-Distill-Qwen-14B', cache_dir='/root/autodl-tmp/models')
+  "
+
+  方法 2：HuggingFace CLI
+
+  pip install huggingface_hub
+
+  huggingface-cli download deepseek-ai/DeepSeek-R1-Distill-Qwen-7B --local-dir /root/autodl-tmp/models/DeepSeek-R1-Distill-Qwen-7B
+  huggingface-cli download deepseek-ai/DeepSeek-R1-Distill-Qwen-14B --local-dir /root/autodl-tmp/models/DeepSeek-R1-Distill-Qwen-14B       
+
+  ---
+  二、修改配置文件
+
+  把模型路径改成实际下载位置：
+
+  eval_configs/deepseek_7b.yaml 第 3 行：
+  MODEL_PATH: '/root/autodl-tmp/models/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'
+
+  eval_configs/deepseek_14b.yaml 第 3 行：
+  MODEL_PATH: '/root/autodl-tmp/models/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B'
+
+  （具体路径取决于 modelscope 下载后的目录结构，下载完 ls 看一下）
+
+  ---
+  三、安装依赖
+
+  pip install datasets transformers accelerate torch pyyaml tqdm requests
+
+  ---
+  四、跑评测
+
+  数据集（MMLU、GSM8K、RAGBench）会自动从 HuggingFace 下载，不需要手动准备。
+
+  cd ~/autodl-tmp/zkhook-gac
+
+  # 跑 DeepSeek-R1-7B（约 20G 显存）
+  python benchmark_accuracy.py --config eval_configs/deepseek_7b.yaml --dataset mmlu gsm8k ragbench
+
+  # 跑 DeepSeek-R1-14B（约 30G 显存）
+  python benchmark_accuracy.py --config eval_configs/deepseek_14b.yaml --dataset mmlu gsm8k ragbench
+
+  # 如果想先少量测试（比如每个数据集 100 条）
+  python benchmark_accuracy.py --config eval_configs/deepseek_7b.yaml --dataset mmlu --num-samples 100
+
+  # 跑完后汇总对比
+  python benchmark_accuracy.py --summarize results/
+
+

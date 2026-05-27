@@ -1,0 +1,32 @@
+# Generic collaborative inference configuration.
+#
+# Put local HuggingFace model directories under ./weights/<model-name>/,
+# then edit CONFIG_API_SERVER if you want to use different models.
+
+# How to combine model logits:
+#   average: average all selected model probability vectors
+#   score:   weight each model by its score
+NORM_TYPE_API_SERVER: "average"
+
+# Ensemble threshold. Set to 1.0 to fuse at every generation step.
+# Lower values can be used with one primary model and supportive fallback models.
+THRESHOLD_API_SERVER: 1.0
+
+CONFIG_API_SERVER:
+  - name: "Qwen1.5-1.8B-Chat"
+    weight: "./weights/Qwen1.5-1.8B-Chat"
+    max_memory:
+      0: "22GiB"
+    num_gpus: 1
+    score: 100
+    priority: "supportive"
+    quantization: "none"
+
+  - name: "Qwen1.5-7B-Chat"
+    weight: "./weights/Qwen1.5-7B-Chat"
+    max_memory:
+      0: "22GiB"
+    num_gpus: 1
+    score: 100
+    priority: "supportive"
+    quantization: "none"
